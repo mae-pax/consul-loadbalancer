@@ -101,6 +101,7 @@ func main() {
 	devEnvLog, _ := zap.NewDevelopment(zap.Development())
 	logger := &MyZapLogger{log: devEnvLog}
 	r, err := balancer.NewConsulResolver(
+		"aliyun",
 		"127.0.0.1:8500",
 		"hb-aerospike",
 		"clb/hb-aerospike/cpu_threshold.json",

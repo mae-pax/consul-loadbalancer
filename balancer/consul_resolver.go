@@ -257,6 +257,7 @@ func (r *ConsulResolver) updateZoneCPUMap() error {
 	if time.Now().Unix()-zc.Updated < 300 {
 		r.zoneCPUUpdated = true
 	} else {
+		r.zoneCPUUpdated = false
 		r.logger.Warnf("%s no update, will hold factor learning", r.zoneCPUKey)
 	}
 	m := make(map[string]float64)
@@ -407,6 +408,9 @@ func (r *ConsulResolver) updateCandidatePool() {
 						r.logger.Debugf("balanceFactor update, node.BalanceFactor * r.onlineLab.FactorStartRate balanceFactor: %f", balanceFactor)
 					}
 				}
+				r.logger.Debugf("will check nodeBalance, node.WorkLoad: %f, serviceZone.WorkLoad: %f, r.onlineLab.RateThreshold: %f, r.zoneCPUUpdated: %t",
+									node.WorkLoad, serviceZone.WorkLoad, r.onlineLab.RateThreshold, r.zoneCPUUpdated)
+
 				if !r.nodeBalanced(node, serviceZone) && r.zoneCPUUpdated {
 					if node.WorkLoad > serviceZone.WorkLoad {
 						balanceFactor -= balanceFactor * r.onlineLab.LearningRate
