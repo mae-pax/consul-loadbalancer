@@ -35,7 +35,7 @@ func (b *ConsulResolverBuilder) Build() (*ConsulResolver, error) {
 	return NewConsulResolver(b.Cloud, b.Address, b.Service, b.CPUThresholdKey, b.ZoneCPUKey, b.InstanceFactorKey, b.OnlineLabKey, b.Interval, b.Timeout)
 }
 
-func NewConsulResolver(cloud, address, service, cpuThresholdKey, zoneCPUKey, instanceFactorKey, onlineLabKey string, interval, timeout time.Duration) (*ConsulResolver, error) {
+func NewConsulResolver(cloud, address, service, cpuThresholdKey, zoneCPUKey, instanceFactorKey, onlineLabKey string, interval, timeout time.Duration, args ...string) (*ConsulResolver, error) {
 	config := api.DefaultConfig()
 	config.Address = address
 	client, err := api.NewClient(config)
@@ -56,6 +56,9 @@ func NewConsulResolver(cloud, address, service, cpuThresholdKey, zoneCPUKey, ins
 		zone:               util.Zone(cloud),
 		done:               make(chan bool),
 		balanceFactorCache: make(map[string]float64),
+	}
+	if len(args) != 0 {
+		r.k8sServiceKey = args[0]
 	}
 
 	return r, nil
@@ -78,6 +81,7 @@ type ConsulResolver struct {
 	done               chan bool
 	cpuThreshold       float64
 	onlineLab          *OnlineLab
+	k8sServiceKey      string
 	cpuThresholdKey    string
 	instanceFactorKey  string
 	onlineLabKey       string
@@ -306,25 +310,37 @@ func (r *ConsulResolver) updateInstanceFactorMap() error {
 }
 
 func (r *ConsulResolver) updateServiceZone() error {
-	qm := api.QueryOptions{}
-	qm.WaitIndex = r.lastIndex
-	qm.WaitTime = r.timeout
-	res, meta, err := r.client.Health().Service(r.service, "", true, &qm)
-	if err != nil {
-		return err
-	}
-	r.lastIndex = meta.LastIndex
-	serviceNodes := make([]ServiceNode, len(res))
-	for i, entry := range res {
-		serviceNode := ServiceNode{}
-		serviceNode.Zone = entry.Service.Meta["zone"]
-		balanceFactor, _ := strconv.ParseFloat(entry.Service.Meta["balanceFactor"], 64)
-		serviceNode.BalanceFactor = balanceFactor
-		serviceNode.InstanceID = entry.Service.Meta["instanceID"]
-		serviceNode.PublicIP = entry.Service.Meta["publicIP"]
-		serviceNode.Host = entry.Service.Address
-		serviceNode.Port = entry.Service.Port
-		serviceNodes[i] = serviceNode
+	var serviceNodes []ServiceNode
+	if r.k8sServiceKey != "" {
+		res, _, err := r.client.KV().Get(r.k8sServiceKey, nil)
+		if err != nil {
+			return err
+		}
+		err = jsoniter.ConfigCompatibleWithStandardLibrary.Unmarshal(res.Value, &serviceNodes)
+		if err != nil {
+			return err
+		}
+	} else {
+		qm := api.QueryOptions{}
+		qm.WaitIndex = r.lastIndex
+		qm.WaitTime = r.timeout
+		res, meta, err := r.client.Health().Service(r.service, "", true, &qm)
+		if err != nil {
+			return err
+		}
+		r.lastIndex = meta.LastIndex
+		serviceNodes = make([]ServiceNode, len(res))
+		for i, entry := range res {
+			serviceNode := ServiceNode{}
+			serviceNode.Zone = entry.Service.Meta["zone"]
+			balanceFactor, _ := strconv.ParseFloat(entry.Service.Meta["balanceFactor"], 64)
+			serviceNode.BalanceFactor = balanceFactor
+			serviceNode.InstanceID = entry.Service.Meta["instanceID"]
+			serviceNode.PublicIP = entry.Service.Meta["publicIP"]
+			serviceNode.Host = entry.Service.Address
+			serviceNode.Port = entry.Service.Port
+			serviceNodes[i] = serviceNode
+		}
 	}
 
 	m := make(map[string]*ServiceZone)
@@ -409,7 +425,7 @@ func (r *ConsulResolver) updateCandidatePool() {
 					}
 				}
 				r.logger.Debugf("will check nodeBalance, node.WorkLoad: %f, serviceZone.WorkLoad: %f, r.onlineLab.RateThreshold: %f, r.zoneCPUUpdated: %t",
-									node.WorkLoad, serviceZone.WorkLoad, r.onlineLab.RateThreshold, r.zoneCPUUpdated)
+					node.WorkLoad, serviceZone.WorkLoad, r.onlineLab.RateThreshold, r.zoneCPUUpdated)
 
 				if !r.nodeBalanced(node, serviceZone) && r.zoneCPUUpdated {
 					if node.WorkLoad > serviceZone.WorkLoad {
