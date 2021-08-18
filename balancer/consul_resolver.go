@@ -115,6 +115,11 @@ type CandidatePool struct {
 	FactorSum float64
 }
 
+type ServiceNodes struct {
+	UpdateTime int64
+	Data       []ServiceNode
+}
+
 type ServiceNode struct {
 	PublicIP      string
 	InstanceID    string
@@ -312,14 +317,16 @@ func (r *ConsulResolver) updateInstanceFactorMap() error {
 func (r *ConsulResolver) updateServiceZone() error {
 	var serviceNodes []ServiceNode
 	if r.k8sServiceKey != "" {
+		var services ServiceNodes
 		res, _, err := r.client.KV().Get(r.k8sServiceKey, nil)
 		if err != nil {
 			return err
 		}
-		err = jsoniter.ConfigCompatibleWithStandardLibrary.Unmarshal(res.Value, &serviceNodes)
+		err = jsoniter.ConfigCompatibleWithStandardLibrary.Unmarshal(res.Value, &services)
 		if err != nil {
 			return err
 		}
+		serviceNodes = services.Data
 	} else {
 		qm := api.QueryOptions{}
 		qm.WaitIndex = r.lastIndex
