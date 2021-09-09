@@ -542,7 +542,7 @@ func (r *ConsulResolver) zoneBalanced(localZone *ServiceZone, crossZone *Service
 }
 
 func (r *ConsulResolver) SelectNode() *ServiceNode {
-	if len(r.candidatePool.Nodes) == 0 {
+	if r.candidatePool == nil || len(r.candidatePool.Nodes) == 0 {
 		return nil
 	}
 
