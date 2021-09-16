@@ -1,10 +1,12 @@
 package util
 
 import (
+	"context"
 	crand "crypto/rand"
+	"io/ioutil"
 	"math/big"
 	"math/rand"
-	"os/exec"
+	"net/http"
 	"time"
 )
 
@@ -39,12 +41,16 @@ func Zone(cloud string) string {
 		api = API_AWS_META_DATA
 	}
 
-	out, err := exec.Command("curl", "-s", api).Output()
+	ctx, _ := context.WithTimeout(context.Background(), time.Millisecond*20)
+	req, _ := http.NewRequest("GET", api, nil)
+	req = req.WithContext(ctx)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return "unknown"
 	}
-
-	return string(out)
+	defer resp.Body.Close()
+	data, _ := ioutil.ReadAll(resp.Body)
+	return string(data)
 }
 
 func IntPseudoRandom(min, max int) int {
